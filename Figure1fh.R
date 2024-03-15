@@ -1,0 +1,225 @@
+library(readr)
+library(dplyr)
+library (dendextend)
+#Feb_constellation_sameCoor.R
+load("data/832specimen_noRLL.RData")
+order<-read_csv("data/order1.csv",col_names = FALSE)#cortical areas in 6 modules
+labels(dend)<-m$target
+png("output/Fig1e_dendrogram.png", width = 800, height = 600, units = "px")
+
+dend%>%  assign_values_to_leaves_nodePar(14, "pch") %>%  # node point type
+  assign_values_to_leaves_nodePar(0.8, "cex") %>%  # node point size
+  assign_values_to_leaves_nodePar(m$color,"col")%>% # node point color
+  assign_values_to_leaves_nodePar(m$target,"labels" ) %>%
+  assign_values_to_leaves_nodePar( 0.5, "lab.cex")%>%
+  #labels_colors( col = c(unique(m$tr)))%>%
+  plot#26x6 landscape26x4 better
+
+dev.off()
+#save(D2sorted, m, dend, fit, file="832specimen_noRLL.RData")
+
+D2sorted0=D2sorted
+rownames(D2sorted0)<-paste(D2sorted0$target, D2sorted0$specimen)
+##need to remove area with single experiment
+temp=D2sorted0[,c(1,4)]
+#temp=temp%>%subset(target %in%  temp1$target[temp1$n>1])
+i=1
+for (a in unique(temp$target)) {
+  temp$tr[temp$target==a]=i
+  i=i+1
+}
+
+
+ma<-D2sorted0[rownames(temp),5:1124]
+#rownames(ma)<-paste(D2sorted0[rownames(temp),]$target,D2sorted0[rownames(temp),]$specimen)
+rownames(ma)<-D2sorted0[rownames(temp),]$specimen
+
+ma<-as.matrix(ma)
+
+library(amap)
+library(Seurat)
+#library(cluster)
+#library(NbClust)
+distance.matrix=Dist(ma, method = "cor")
+distance.matrix=as.matrix(distance.matrix)
+seurat <- CreateSeuratObject(distance.matrix)
+seurat<-ScaleData(seurat)
+seurat<-RunTSNE(seurat,distance.matrix=distance.matrix)
+seurat@meta.data$K.64<-row.names(ma)
+
+seurat@meta.data<-cbind(seurat@meta.data,temp)
+seurat@meta.data$K.64<-temp$tr
+
+##################
+color_code<-function(target, order) {
+  c<-data.frame(area=target, color=NA)
+  for (t in target) {
+    if(grepl("FRP", t)) {c$color[which(c$area==t)]=rainbow(40)[2]}
+    if(grepl("ACA", t)) {c$color[which(c$area==t)]=rainbow(40)[1]}
+    if( t=="PL") {c$color[which(c$area==t)]=rainbow(40)[3]}
+    if(grepl("ILA", t)) {c$color[which(c$area==t)]=rainbow(40)[38]}
+    if(grepl("ORB", t)) {c$color[which(c$area==t)]=rainbow(40)[36]}
+    if (t %in% order[which((order)=="AId"):which((order)=="ECT")]) {c$color[which(c$area==t)]=rainbow(40)[8]}
+    if (t %in% order[which((order)=="SSs"):(which((order)=="MOs")-1)]) {c$color[which(c$area==t)]=rainbow(40)[6]}
+    if(grepl("MO", t)) {c$color[which(c$area==t)]=rainbow(40)[5]}
+    if (t %in% order[which((order)=="VISal"):which((order)=="VISrl")]) {c$color[which(c$area==t)]="lightblue"}
+    if( t=="SSp-bfd-rll") {c$color[which(c$area==t)]="green"}
+    if (t %in% order[which((order)=="VISa"):which((order)=="RSPv")]) {c$color[which(c$area==t)]="blue"} 
+    if (t %in% order[which((order)=="AUDd"):which((order)=="AUDv")]) {c$color[which(c$area==t)]="#330066"}            
+    if (t %in% order[which((order)=="MOB"):which((order)=="TR")]) {c$color[which(c$area==t)]=rainbow(30)[8]}
+    if (t %in% order[which((order)=="CA1"):which((order)=="APr")]) {c$color[which(c$area==t)]="green"}
+    if (t %in% order[which((order)=="CLA"):which((order)=="PA")]) {c$color[which(c$area==t)]=rainbow(30)[18]}
+    if (t %in% order[which((order)=="CP"):which((order)=="MEA")]) {c$color[which(c$area==t)]=rainbow(30)[7]}
+    if (t %in% order[which((order)=="GPe"):which((order)=="BAC")]) {c$color[which(c$area==t)]=rainbow(30)[5]}
+    if (t %in% order[which((order)=="VAL"):which((order)=="LH")]) {c$color[which(c$area==t)]=rainbow(30)[3]}
+    if (t %in% order[which((order)=="SO"):which((order)=="ME")]) {c$color[which(c$area==t)]=rainbow(30)[29]}
+    if (t %in% order[which((order)=="SCs"):which((order)=="DR")]) {c$color[which(c$area==t)]=rainbow(30)[24]}
+    if (t %in% order[which((order)=="NLL"):which((order)=="SLD")]) {c$color[which(c$area==t)]=rainbow(30)[26]}
+    if (t %in% order[which((order)=="AP"):which((order)=="RO")]) {c$color[which(c$area==t)]=rainbow(30)[28]}
+    if (t %in% order[which((order)=="LING"):which((order)=="VeCB")]) {c$color[which(c$area==t)]=rainbow(30)[8]}
+  }
+  return(c)
+}
+
+c<-color_code(order$X1, order$X1)
+#####################
+umap.df<- as.data.frame(seurat@reductions$tsne@cell.embeddings)
+
+umap.df$tr <- temp$tr[match(rownames(umap.df), temp$specimen)]
+
+umap.df$target <- temp$target[match(rownames(umap.df), temp$specimen)]
+umap.df$color<-NA
+umap.df$target<-as.character(umap.df$target)
+for (a in 1:dim(umap.df)[1]) {
+  umap.df$color[a]<-c$color[which(c$area==umap.df$target[a])]
+}
+library(dplyr)
+library(ggplot2)
+g<-umap.df %>%
+  ggplot() +
+  geom_point(data=umap.df, 
+             aes(x=tSNE_1,
+                 y=tSNE_2,
+                 color=color),
+             cex=0.5) +
+  scale_color_identity(guide="none") +
+  theme_bw()+
+  theme(plot.title=element_blank(),
+        text=element_text(size=8),
+        #axis.text.x = element_blank(),axis.text.y = element_blank(),
+        #axis.title.x = element_blank(),axis.title.y = element_blank(),
+        axis.ticks= element_blank(),axis.line=element_blank(),
+        legend.title = element_text(size=7),legend.text = element_text(size=7),
+        legend.key.size=unit(0.1,"mm"),legend.key.width = unit(0.1,"mm"),
+        legend.background = element_rect(size=.1),legend.position="right") 
+g
+ggsave("output/Fig1g.pdf", plot = g,width = 6, height = 6, dpi = 300)
+
+umap.df$tr<-factor(umap.df$tr, levels=unique(umap.df$tr))
+umap.df$tr1<-factor(m$cluster, levels=unique(m$cluster))
+c_cluster=c("#CC476B", "#BF592D", "#AC6900", "#917600", "#6C8200", "#228B00", "#009232", "#00956B", "#009595", "#0082CE", "#636CD8", "#A352D1","#C33DBA", "#CE3A97")
+p<-umap.df %>%
+  ggplot() +
+  geom_point(data=umap.df, 
+             aes(x=tSNE_1,
+                 y=tSNE_2,
+                 color=tr1),
+             cex=0.5) +
+  #scale_color_identity(guide="none") +
+  theme_bw()+
+  scale_color_manual(values = c_cluster) +
+  theme(plot.title=element_blank(),
+        text=element_text(size=8),
+        #axis.text.x = element_blank(),axis.text.y = element_blank(),
+        #axis.title.x = element_blank(),axis.title.y = element_blank(),
+        axis.ticks= element_blank(),axis.line=element_blank(),
+        legend.title = element_text(size=7),legend.text = element_text(size=7),
+        legend.key.size=unit(0.1,"mm"),legend.key.width = unit(0.1,"mm"),
+        legend.background = element_rect(size=.1),legend.position="none")
+
+p
+ggsave("output/Fig1f.pdf", plot = p,width = 6, height = 6, dpi = 300)
+
+
+library(scrattch.hicat)
+cl<-seurat@meta.data$K.64
+names(cl)<-rownames(seurat@meta.data)
+cl.df<-get_cl_df(cl)
+cl.df$size<-as.vector(cl.df$size)
+cl.df$cl<-cl.df$cluster_label
+colnames(cl.df)[which(colnames(cl.df)=="size")]<-"cluster_size"
+for ( i in unique(cl.df$cluster_id)) {
+  target=unique(temp$target[temp$tr==i])
+  cl.df$cluster_color[cl.df$cluster_id==i]=c$color[c$area==target]
+}
+
+#cl.df$cluster_color[5:7]<-colorRampPalette(c("green","cyan"))(4)
+#cl.df$cluster_color[8:11]<-colorRampPalette(c("purple","magenta"))(4)
+cl.df$x<-NA
+cl.df$y<-NA
+for(i in 1:max(cl)){
+  cl.df$x[i]<-mean(seurat@reductions$tsne@cell.embeddings[which(cl==i),1])
+  cl.df$y[i]<-mean(seurat@reductions$tsne@cell.embeddings[which(cl==i),2])
+}
+for (i in temp$tr) {
+  cl.df$cluster_label[cl.df$cluster_id==i]=as.character(unique(temp$target[temp$tr==i]))
+}
+temp1=temp%>%group_by(target)%>%summarise(n=n())#for experiment>1
+#for cortex only
+#temp1=temp1%>%subset(temp1$target %in% order$X1[1:44])
+#pick experiment>2
+cl.df<-cl.df[cl.df$cluster_label %in%  temp1$target[temp1$n>1],]
+cl<-cl[cl%in%cl.df$cl]
+
+#knn<-get_knn_graph(seurat@reductions$tsne@cell.embeddings,cl,cl.df)
+#plot_constellation(knn$knn.cl.df,cl.df,node.label="cluster_label", out.dir = "C:/Users/shenqiny/Downloads",label.size = 3,max_size = 7,plot.height = 15, plot.width = 20,exxageration = 3)
+rd.dat=seurat@reductions$tsne@cell.embeddings
+
+k=15
+knn.outlier.th=2
+outlier.frac.th=0.5
+
+knn.result = RANN::nn2(rd.dat,k=k)
+row.names(knn.result[[1]]) = row.names(knn.result[[2]])=row.names(rd.dat)
+knn  = knn.result[[1]]
+knn.dist = knn.result[[2]]
+cl.knn.dist.mean = tapply(names(cl),cl, function(x) mean(knn.dist[x,-1]))
+cl.knn.dist.sd = tapply(names(cl),cl, function(x) sd(knn.dist[x,-1]))
+cl.knn.dist.th = (cl.knn.dist.mean + knn.outlier.th * cl.knn.dist.sd)
+
+knn.dist.th=cl.knn.dist.th[as.character(cl[row.names(knn)])]
+#outlier = apply(knn.dist, 2, function(x) x>  knn.dist.th)
+#row.names(outlier)  = row.names(knn.dist)
+#knn[outlier] = NA
+#select.cells = row.names(outlier)[rowMeans(outlier) < outlier.frac.th]  
+select.cells =rownames(seurat@meta.data)
+pred.result = predict_knn(knn[select.cells,], row.names(rd.dat), cl)
+pred.prob = pred.result$pred.prob
+knn.cell.cl.counts = round(pred.prob * ncol(knn))
+knn.cl.cl.counts = do.call("rbind",tapply(row.names(pred.prob), cl[row.names(pred.prob)], function(x) colSums(knn.cell.cl.counts[x,])))
+knn.cl.df = as.data.frame(as.table(knn.cl.cl.counts))
+
+colnames(knn.cl.df)[1:2] = c("cl.from","cl.to")
+from.size = rowSums(knn.cl.cl.counts)
+to.size = colSums(knn.cl.cl.counts)
+total = sum(knn.cl.cl.counts)
+knn.cl.df$cl.from.total= from.size[as.character(knn.cl.df$cl.from)]
+knn.cl.df$cl.to.total = to.size[as.character(knn.cl.df$cl.to)]
+knn.cl.df = knn.cl.df[knn.cl.df$Freq > 0,]
+knn.cl.df$pval.log = knn.cl.df$odds  = 0
+for(i in 1:nrow(knn.cl.df)){
+  q = knn.cl.df$Freq[i] - 1
+  k = knn.cl.df$cl.from.total[i]
+  m = knn.cl.df$cl.to.total[i]
+  n = total - m
+  knn.cl.df$pval.log[i]=phyper(q, m=m, n=n, k=k, lower.tail = FALSE, log.p=TRUE)
+  knn.cl.df$odds[i] = (q + 1) / (k * m /total)
+}
+knn.cl.df$frac = knn.cl.df$Freq/knn.cl.df$cl.from.total
+knn.cl.df$cl.from.label = cl.df[as.character(knn.cl.df$cl.from),"cluster_label"]
+knn.cl.df$cl.to.label = cl.df[as.character(knn.cl.df$cl.to),"cluster_label"]
+
+
+#plot_constellation(knn.cl.df,cl.df,node.label="cluster_label", out.dir = "C:/Users/shenqiny/Downloads",label.size = 3,max_size = 7,plot.height = 15, plot.width = 20,exxageration = 3)
+plot_constellation(knn.cl.df,cl.df,node.label="cluster_label", out.dir = "output",label.size = 3,max_size = 7,plot.height = 15, plot.width = 15,exxageration = 3)
+

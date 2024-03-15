@@ -1,0 +1,132 @@
+---
+title: "plot"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. It is to generate a heatmap for normalized projection volume using a list of specimen.
+
+```{r}
+library(readxl)
+library(dplyr)
+library(readr)
+library(tidyr)
+library(stringr)
+library(ggplot2)
+```
+
+#Read the sd reduced, masked, normalized pv
+```{r}
+load("data/BG_list_March.RData")#846 experiments
+order<-read_csv("data/order1.csv",col_names = FALSE)#cortical areas in 6 modules
+```
+
+## brain area order
+```{r}
+b<-as.character(order$X1)
+
+```
+#clustering order
+```{r}
+#load("//allen/programs/celltypes/workgroups/mct-t200/ViralCore/Shenqin/r_projects/M2/Jan/output/Original_831specimen_noRLL.RData")
+load("data/832specimen_noRLL.RData")
+
+```
+#Make plot function (change it for 314 brain)
+```{r}
+make_plot<-function(ipsi_new, b) {
+m<-ipsi_new
+m[is.na(m)]<-0
+#m$target<-factor(m$target, levels=b)
+ordering<-m$specimen
+
+m<-m%>%gather(key="input_area", value="pv", 4:317)
+
+m<- m %>%
+  # create a new variable from projection_volume
+  mutate(countfactor=cut(pv,breaks=c(-1,0, 0.0001, 0.001, 0.005, 0.01, 0.05, 1.00),
+                         labels=c("0","0-0.0001", "0.0001-0.001","0.001-0.005","0.005-0.01","0.01-0.05","0.05-1")))%>%
+  # change level order
+  mutate(countfactor=factor(as.character(countfactor),levels=rev(levels(countfactor))))
+m$specimen=factor(m$specimen, levels=ordering)
+#m$graph_order <- as.factor(m$graph_order)
+#m$input_area <- factor(m$input_area, levels=b)
+
+#table (cut(m$pv, breaks=c(-1,0, 0.00005,0.0005,0.0025, 0.01, 0.05,  1)))
+##table (cut(m$pv, breaks=c(-1,0, 0.0002,0.002,0.01, 0.02, 0.05,  1)))
+
+
+
+### make new plot for aim5
+# assign text colour
+textcol <- "grey40"
+pr <- ggplot(m,aes(x=input_area,y=specimen,fill=countfactor))+
+  geom_tile(colour=NA,size=0.2)+
+  guides(fill=guide_legend(title="projection_volume"))+
+  labs(x="input areas",y="Specimen",title=" ")+
+  scale_y_discrete(limits=ordering,expand=c(0,0))+
+  scale_x_discrete(limits=b,expand=c(0,0))+
+  scale_fill_manual(values=c("#d53e4f","#f46d43","#fdae61","#fee08b","#e6f598","#aadca3","#1e90ff"),na.value = "#1e90ff")+
+  #coord_fixed()+
+  theme_grey(base_size=10)+
+  theme(legend.position="right",legend.direction="vertical",
+        legend.title=element_text(colour=textcol),
+        legend.margin=margin(grid::unit(0,"cm")),
+        legend.text=element_text(colour=textcol,size=2,face="bold"),
+        legend.key.height=grid::unit(0.2,"cm"),
+        legend.key.width=grid::unit(0.2,"cm"),
+        #axis.text.x=element_blank(),
+        #axis.text.y=element_blank(),
+        text=element_text(size=5),
+        axis.text.x=element_text(size=1, angle=90, hjust=1),
+        axis.text.y=element_text (size=1),
+        axis.ticks=element_blank(),
+        plot.background=element_blank(),
+        panel.border=element_blank(),
+        #plot.margin=margin(0.7,0.4,0.1,0.2,"cm"),
+        plot.title=element_text(colour=textcol,hjust=0,size=14,face="bold"))
+return (pr)
+}
+```
+## make plots
+```{r pressure, echo=FALSE}
+
+ipsi<-ipsi_new[match(D2sorted$image_series_id, as.numeric(ipsi_new$image_series_id)),]
+contra<-contra_new[match(D2sorted$image_series_id, as.numeric(contra_new$image_series_id)),]
+pl<-make_plot(contra,b)
+#ggsave("Figures/figure1/contra.eps", pl, device = "eps",height=16,width=16,units="in",dpi=600)
+#ggsave("Figures/figure1/contra.pdf", pl, height=16,width=16,units="in",dpi=600)
+
+pr<-make_plot(ipsi,b)
+#ggsave("Figures/figure1/ipsi.eps", pr, device = "eps",height=16,width=16,units="in",dpi=600)
+#ggsave("Figures/figure1/ipsi.pdf", pr, height=16,width=16,units="in",dpi=600)
+#remove label title
+p=pr+theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks = element_blank(),
+        legend.position = "none"
+        ) +
+  
+  # Remove axis labels
+  labs(x = NULL, y = NULL)
+ggsave("output/Fig1e_ipsi.png", p, device = "png",height=16,width=16,units="in",dpi=600)
+
+p=pl+theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks = element_blank(),
+        legend.position = "none"
+        ) +
+  
+  # Remove axis labels
+  labs(x = NULL, y = NULL)
+ggsave("output/Fig1e_contra.png", p, device = "png",height=16,width=16,units="in",dpi=600)
+
+
+```
+
+
