@@ -1,0 +1,333 @@
+---
+title: "M2_summary_all"
+output: html_document
+date: "2023-04-03"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+# Import libraries
+```{r}
+library(readxl)
+library(dplyr)
+library(readr)
+library(tidyr)
+library(stringr)
+library(purrr)
+library(plotrix)
+library(RColorBrewer)
+ library(beeswarm)
+library(ggbeeswarm)
+library(gridExtra)
+```
+#load the dataset
+```{r}
+getwd()
+
+load("data/BG_list_March.RData")#846 experiments
+order<-read_csv("data/order1.csv",col_names = FALSE)#cortical areas in 6 modules
+```
+#compare SSp (remove SSp-tr since it is in median module)
+```{r}
+cortex_ipsi=ipsi_new%>%subset(target %in% order$X1[1:43])
+cortex_contra=contra_new%>%subset(target %in% order$X1[1:43])
+
+cortex_ipsi<-subset(cortex_ipsi, specimen!="Cux2-IRES-Cre-411779") 
+cortex_contra<-subset(cortex_contra, specimen!="Cux2-IRES-Cre-411779") 
+
+test<-cortex_ipsi%>%group_by( target)%>% summarise_if(is.numeric, median,na.rm=TRUE)
+#import module order info
+cortex_module <- read_csv("data/Figure3_cor/cortex_module.csv", col_types = cols(...1 = col_skip()))
+pre<-cortex_module$area[cortex_module$module==1]
+
+cortex_ipsi$pre<-rowSums(cortex_ipsi[, pre])
+cortex_contra$pre<-rowSums(cortex_contra[, pre])
+
+aud<-cortex_module$area[cortex_module$module==5]
+cortex_ipsi$aud<-rowSums(cortex_ipsi[, aud])
+cortex_contra$aud<-rowSums(cortex_contra[, aud])
+
+vis<-cortex_module$area[cortex_module$module==4]
+cortex_ipsi$vis<-rowSums(cortex_ipsi[, vis])
+cortex_contra$vis<-rowSums(cortex_contra[, vis])
+
+med<-cortex_module$area[cortex_module$module==3]
+cortex_ipsi$med<-rowSums(cortex_ipsi[, med])
+cortex_contra$med<-rowSums(cortex_contra[, med])
+
+som<-cortex_module$area[cortex_module$module==2]
+cortex_ipsi$som<-rowSums(cortex_ipsi[, som])
+cortex_contra$som<-rowSums(cortex_contra[, som])
+
+th_ss<-c( "VAL","VM", "PO","VPL", "VPM","PoT", "LP",  "RT" )
+#a<-c(order$X1[1:43], th_ss)
+#a<-c("pre", "som", "vis", "med", "aud" )
+a<-c(pre, som, vis, med, aud , th_ss)
+rv<-rev(a)
+
+m_l<-cortex_ipsi%>%group_by(target)%>%summarise(across(where(is.numeric), list(mean=mean ), na.rm = TRUE))
+names(m_l)<-str_replace(names(m_l), "_mean", "")
+m_l<-gather(m_l, key="input", value="mean", 2:dim(m_l)[2])
+
+s_l<-cortex_ipsi%>%group_by(target)%>%summarise(across(where(is.numeric), list(se=std.error ), na.rm = TRUE))
+names(s_l)<-str_replace(names(s_l), "_se", "")
+s_l<-gather(s_l, key="input", value="se", 2:dim(s_l)[2])
+
+m<-left_join(m_l, s_l, by=c("target","input"))
+
+m_l<-cortex_contra%>%group_by(target)%>%summarise(across(where(is.numeric), list(mean=mean ), na.rm = TRUE))
+names(m_l)<-str_replace(names(m_l), "_mean", "")
+m_l<-gather(m_l, key="input", value="mean", 2:dim(m_l)[2])
+
+s_l<-cortex_contra%>%group_by(target)%>%summarise(across(where(is.numeric), list(se=std.error ), na.rm = TRUE))
+names(s_l)<-str_replace(names(s_l), "_se", "")
+s_l<-gather(s_l, key="input", value="se", 2:dim(s_l)[2])
+
+m_c<-merge(m_l, s_l, by=c("target","input"))
+
+
+temp<-m [grepl("SSp", m$target),]#%>%subset(input %in% a)
+temp<-temp%>%subset(target!="SSp-tr")
+temp$input<-factor(temp$input, levels=rv)
+
+temp_c<-m_c [grepl("SSp", m_c$target),]#%>%subset(input %in% a)
+temp_c<-temp_c%>%subset(target!="SSp-tr")
+temp_c$input<-factor(temp_c$input, levels=rv)
+temp1<-cortex_ipsi[grepl("SSp", cortex_ipsi$target), ]%>%subset(target!="SSp-tr" )
+#temp1<-temp1[, c(names(temp1)[1:5],a)]
+temp1<-gather(temp1, key="input", value="mean", 6:dim(temp1)[2]) 
+```
+#eFigure5a
+```{r}
+p <- ggplot(temp1, aes(x=input,  y=mean, color=target)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.1))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#CC3300" , "#CC6633", "#FF6600","#FEC44F"))+scale_x_discrete(limits=c("pre", "som", "vis", "med", "aud"))+ylim(0,1)#10x8
+p
+```
+#eFigure5b
+```{r}
+v<-ggplot(temp%>%subset(input %in% a),aes(x=input,y=mean,group=target, color=target))+geom_point(size=4, position=(position_dodge(width=0.2)))+
+ geom_line(linetype = "dotted")+
+  geom_errorbar(aes(ymin=mean-se,ymax=mean+se),width=.2,position=(position_dodge(width=0.2)))+
+  theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#CC3300" , "#CC6633", "#FF6600","#FEC44F"))
+v+  coord_flip()+ scale_y_reverse()#12x6
+```
+```{r}
+v1<-ggplot(temp_c%>%subset(input %in% a),aes(x=input,y=mean,group=target, color=target))+geom_point(size=4, position=(position_dodge(width=0.2)))+
+  geom_line(linetype = "dotted")+
+  geom_errorbar(aes(ymin=mean-se,ymax=mean+se),width=.2,position=(position_dodge(width=0.2)))+
+  theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#CC3300" , "#CC6633", "#FF6600","#FEC44F"))
+v1+  coord_flip()+ylim(0,0.1)#12x3
+
+```
+#eFigure5c
+```{r}
+#look at layer fraction
+load("data/ipsi_layer_frac.RData")
+SSp_f<-ipsi_fraction%>%subset(image_series_id %in% cortex_ipsi$image_series_id)%>%subset(target !="SSp-tr")
+SSp_f<-SSp_f[grepl("SSp", SSp_f$target),]
+SSp_f<-gather(SSp_f, key=input, value=fraction, 4:244)
+SSp_f<-SSp_f[!is.na(SSp_f$fraction),]
+#remove layer 6
+for ( a in order$X1[1:43]){
+  l6=paste0(a, "6", collapse = "")
+  SSp_f<-SSp_f%>%subset(input!=l6)
+}
+bfd<-SSp_f%>%subset(target=="SSp-bfd")
+g1 <- ggplot(bfd[grepl("AUDd", bfd$input),], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g2 <- ggplot(bfd[grepl("AUDp", bfd$input) & !grepl("AUDpo", bfd$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g3 <- ggplot(bfd[grepl("ACAd", bfd$input)  ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g4 <- ggplot(bfd[grepl("VISa", bfd$input) & !grepl("VISam|VISal", bfd$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g5 <- ggplot(bfd[grepl("VISp", bfd$input) & !grepl("VISpm|VISpl|VISpor", bfd$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g6 <- ggplot(bfd[grepl("VISrl", bfd$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g7 <- ggplot(bfd[grepl("SSp-tr", bfd$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g8 <- ggplot(bfd[grepl("TEa", bfd$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g9 <- ggplot(bfd[grepl("SSs", bfd$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g10 <- ggplot(bfd[grepl("MOs", bfd$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g11 <- ggplot(bfd[grepl("MOp", bfd$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g12 <- ggplot(bfd[grepl("SSp-ul", bfd$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+
+g13 <- ggplot(bfd[grepl("SSp-m", bfd$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g14 <- ggplot(bfd[grepl("SSp-ll", bfd$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g15 <- ggplot(bfd[grepl("SSp-un", bfd$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g16 <- ggplot(bfd[grepl("SSp-bfd", bfd$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g17 <- ggplot(bfd[grepl("ORBl", bfd$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+g18 <- ggplot(bfd[grepl("RSPv", bfd$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+grid.arrange(g1, g2, g3, g4, g5, g6 ,g7, g8, g9, g10, g11, g12, g13, g14,g15, g17, nrow=4)#16x12
+```
+
+```{r}
+#look at layer fraction
+#getwd()
+#save(ipsi_fraction, file="Jan/April/ipsi_layer_frac.RData")
+SSp_f<-ipsi_fraction%>%subset(image_series_id %in% cortex_ipsi$image_series_id)%>%subset(target !="SSp-tr")
+SSp_f<-SSp_f[grepl("SSp", SSp_f$target),]
+SSp_f<-gather(SSp_f, key=input, value=fraction, 4:244)
+SSp_f<-SSp_f[!is.na(SSp_f$fraction),]
+#remove layer 6
+for ( a in order$X1[1:43]){
+  l6=paste0(a, "6", collapse = "")
+  SSp_f<-SSp_f%>%subset(input!=l6)
+}
+SS_m<-SSp_f%>%subset(target=="SSp-m")
+g1 <- ggplot(SS_m[grepl("AUDd", SS_m$input),], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g2 <- ggplot(SS_m[grepl("AUDp", SS_m$input) & !grepl("AUDpo", SS_m$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g3 <- ggplot(SS_m[grepl("ACAd", SS_m$input)  ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g4 <- ggplot(SS_m[grepl("VISa", SS_m$input) & !grepl("VISam|VISal", SS_m$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g5 <- ggplot(SS_m[grepl("VISp", SS_m$input) & !grepl("VISpm|VISpl|VISpor", SS_m$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g6 <- ggplot(SS_m[grepl("VISrl", SS_m$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g7 <- ggplot(SS_m[grepl("SSp-tr", SS_m$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g8 <- ggplot(SS_m[grepl("TEa", SS_m$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g9 <- ggplot(SS_m[grepl("SSs", SS_m$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g10 <- ggplot(SS_m[grepl("MOs", SS_m$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g11 <- ggplot(SS_m[grepl("MOp", SS_m$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g12 <- ggplot(SS_m[grepl("SSp-ul", SS_m$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+
+g13 <- ggplot(SS_m[grepl("SSp-m", SS_m$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g14 <- ggplot(SS_m[grepl("SSp-ll", SS_m$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g15 <- ggplot(SS_m[grepl("SSp-un", SS_m$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g16 <- ggplot(SS_m[grepl("SSp-bfd", SS_m$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g17 <- ggplot(SS_m[grepl("ORBl", SS_m$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+g18 <- ggplot(SS_m[grepl("RSPv", SS_m$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g19 <- ggplot(SS_m[grepl("SSp-m", SS_m$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+grid.arrange( g3,  g8, g9, g10, g11, g12, g13, g14,g15, g16, g17, g19, nrow=3)#16x9
+#g1, #g2,g4, g5, g6 ,g7,
+```
+
+```{r}
+
+SS_n<-SSp_f%>%subset(target=="SSp-n")
+g1 <- ggplot(SS_n[grepl("AUDd", SS_n$input),], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g2 <- ggplot(SS_n[grepl("AUDp", SS_n$input) & !grepl("AUDpo", SS_n$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g3 <- ggplot(SS_n[grepl("ACAd", SS_n$input)  ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g4 <- ggplot(SS_n[grepl("VISa", SS_n$input) & !grepl("VISam|VISal", SS_n$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g5 <- ggplot(SS_n[grepl("VISp", SS_n$input) & !grepl("VISpm|VISpl|VISpor", SS_n$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g6 <- ggplot(SS_n[grepl("VISrl", SS_n$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g7 <- ggplot(SS_n[grepl("SSp-tr", SS_n$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g8 <- ggplot(SS_n[grepl("TEa", SS_n$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g9 <- ggplot(SS_n[grepl("SSs", SS_n$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g10 <- ggplot(SS_n[grepl("MOs", SS_n$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g11 <- ggplot(SS_n[grepl("MOp", SS_n$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g12 <- ggplot(SS_n[grepl("SSp-ul", SS_n$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+
+g13 <- ggplot(SS_n[grepl("SSp-m", SS_n$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g14 <- ggplot(SS_n[grepl("SSp-ll", SS_n$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g15 <- ggplot(SS_n[grepl("SSp-un", SS_n$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g16 <- ggplot(SS_n[grepl("SSp-bfd", SS_n$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#F0E442","#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+g17 <- ggplot(SS_n[grepl("ORBl", SS_n$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+g18 <- ggplot(SS_n[grepl("RSPv", SS_n$input) ,], aes(x=input,  y=fraction, color=input)) +  geom_boxplot(outlier.shape = NA) +geom_point(size=2, position=position_jitterdodge(dodge.width = 0.7, jitter.width = 0.2))+theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_color_manual(values=c("#D55E00", "#56B4E9","#0072B2", "#003300"))+ylim(0,1)#6x8
+
+
+grid.arrange(  g8, g9, g10, g11, g12, g13, g14,g15, g16, g17, nrow=3)#16x9
+#g1, #g2,g4, g5, g6 ,g7,
+```
