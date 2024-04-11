@@ -1,0 +1,186 @@
+---
+title: "medial_analysis"
+author: "Shenqin"
+date: "2022-09-13"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("pvclust")
+library(dendextend)
+```
+
+# eFigure1a
+### load clustering result
+```{r}
+load("../data/BG_list_March.RData")
+c_ipsi<-ipsi_new[grepl("RSP|ACA|SSp-tr", ipsi_new$target),]
+c_contra<-contra_new[grepl("RSP|ACA|SSp-tr", ipsi_new$target),]
+c_ipsi=c_ipsi%>%subset(specimen %in% cluster_list$specimen[3:75])%>%subset(!(specimen %in% c("Sepw1-Cre_NP39-563506", "Sepw1-Cre_NP39-563508", "Cux2-IRES-Cre-503979", "Ctgf-T2A-dgCre-505824", "Ctgf-T2A-dgCre-456894","Ctgf-T2A-dgCre-505826"
+)))
+
+c_ipsi=c_ipsi%>%subset(specimen %in% cluster_list$specimen[3:75])%>%subset(!(specimen %in% c("Sepw1-Cre_NP39-563506", "Sepw1-Cre_NP39-563508", "Cux2-IRES-Cre-503979", "Ctgf-T2A-dgCre-505824", "Ctgf-T2A-dgCre-456894","Ctgf-T2A-dgCre-505826"
+)))
+# pick clean experiments targeting only one area
+c_ipsi=c_ipsi%>%subset(specimen %in% c( "Rbp4-Cre_KL100-501430", "Cux2-IRES-Cre-448392", "Rbp4-Cre_KL100-433049", "Rbp4-Cre_KL100-428628", "Rbp4-Cre_KL100-388978", "Tlx3-Cre_PL56-564648", "Syt6-Cre_KI148-375936", "Pvalb-IRES-Cre;Ai75-385368", "Syt6-Cre_KI148-375941", "Ctgf-T2A-dgCre-388637", "Sst-IRES-Cre;Ai148-380969", "Tlx3-Cre_PL56-564650", "Vip-IRES-Cre;Sst-IRES-FlpO;Ai65-384120", "A930038C07Rik-Tg1-Cre-381248", "Cux2-IRES-Cre-378029", "Cux2-IRES-Cre-435558", "Sepw1-Cre_NP39-407883", "A930038C07Rik-Tg1-Cre-390992", "Sepw1-Cre_NP39-407881", "Sst-IRES-Cre-446223", "A930038C07Rik-Tg1-Cre-440683", "Cux2-IRES-Cre-486111", "Ctgf-T2A-dgCre-401163", "Rbp4-Cre_KL100-388974", "Syt6-Cre_KI148-442026", "Vip-IRES-Cre-440985", "A930038C07Rik-Tg1-Cre-440684", "Cux2-IRES-Cre-410377", "Cux2-IRES-Cre-410373", "Rbp4-Cre_KL100-405702", "Rbp4-Cre_KL100-409323", "A930038C07Rik-Tg1-Cre-497027", "A930038C07Rik-Tg1-Cre-497028", "Pvalb-IRES-Cre-504841", "Syt6-Cre_KI148-507243", "Cux2-IRES-Cre-438676", "Rbp4-Cre_KL100-441001", "Rbp4-Cre_KL100-433047", "Sst-IRES-Cre;Ai162-387429", "Syt6-Cre_KI148-507240", "Pvalb-IRES-Cre-504838", "Ctgf-T2A-dgCre-628299", "Nr5a1-Cre-613795", "Sst-IRES-Cre-495023", "Sst-IRES-Cre-495022", "Ctgf-T2A-dgCre-505825", "Vip-IRES-Cre-500514", "Ntsr1-Cre_GN220-611936", "Sepw1-Cre_NP39-620048", "Sst-IRES-Cre-522356", "Pvalb-IRES-Cre-401200", "Vip-IRES-Cre;Ai148-377768", "Syt6-Cre_KI148-378932", "A930038C07Rik-Tg1-Cre-488430", "Cux2-IRES-Cre-381327", "Syt6-Cre_KI148-521392", "Pvalb-IRES-Cre-521338", "Sepw1-Cre_NP39-416329", "Sst-IRES-Cre;Ai32-386132", "A930038C07Rik-Tg1-Cre-397219", "A930038C07Rik-Tg1-Cre-397220", "Rbp4-Cre_KL100-398595", "Cux2-IRES-Cre-415339", "Rbp4-Cre_KL100-401256", "Syt6-Cre_KI148-375935", "Cux2-IRES-Cre-612135", "Rbp4-Cre_KL100-617252" ) )
+c_contra=c_contra%>%subset(image_series_id %in% c_ipsi$image_series_id)
+c_contra=c_contra[match(c_ipsi$specimen, c_contra$specimen),]
+test<-c_ipsi[,-c(2:3)]
+test2<-c_contra[,-c(2:3)]
+
+testm<-left_join(test,test2,by="specimen")
+rowof=testm$specimen
+testm<-testm[,-1]
+row.names(testm)<-rowof
+
+set.seed(1234)
+fit3<-pvclust(t(testm), method.hclust = 'ward.D2', parallel = TRUE, nboot=5000)#36x12
+#plot(fit3)###clustering show spatial proximity correlated with similarity in input patterns (8x16)
+#pvrect(fit3)
+cluster_list<-fit3$hclust
+cluster_list_d<-cluster_list$labels[cluster_list$order]
+
+ipsi_D2sorted<-c_ipsi[match(cluster_list_d, c_ipsi$specimen),]
+contra_D2sorted<-c_contra[match(cluster_list_d, c_contra$specimen),]
+
+m<-ipsi_D2sorted[,1:3]
+m$target<-as.character(m$target)
+
+
+color_code<-function(target) {
+  c<-data.frame(area=target, color=NA)
+  for (t in target) {
+    if(grepl("ACAd", t)) {c$color[which(c$area==t)]="#EC2024"}
+    if(grepl("ACAv", t)) {c$color[which(c$area==t)]="#D94397"}
+    if(grepl("RSPd", t)) {c$color[which(c$area==t)]="#C9DA2B"}
+    if (grepl("RSPv", t)) {c$color[which(c$area==t)]="#FFCC05"}
+    if (grepl("RSPagl", t)) {c$color[which(c$area==t)]="#F16622"}
+    if(grepl("SSp-tr", t)) {c$color[which(c$area==t)]="yellow"}
+  }
+  return(c)
+}
+
+c<-color_code(unique(m$target) )
+
+m$specimen<-factor(m$specimen, levels=cluster_list_d)
+
+m$target<-factor(m$target, levels=c("SSp-tr", "ACAd", "ACAv", "RSPd", "RSPv", "RSPagl"))
+for (a in 1:dim(m)[1]) {
+  m$color[a]<-c$color[which(c$area==m$target[a])]
+}
+
+
+cluster_list<-data.frame(specimen=fit3$hclust$labels,  tree=cutree(fit3$hclust, k = c(5)))
+cluster_list<-cluster_list[match(cluster_list_d, cluster_list$specimen),]
+cluster_list<-left_join(cluster_list, m, by="specimen")
+
+
+dend <- fit3$hclust %>% as.dendrogram %>% color_branches(k=5)
+dend  %>% set("leaves_pch", 15) %>%  # node point type
+  set("leaves_cex", 1) %>%  # node point size
+  set("leaves_col", m$color)%>% # node point color
+  set("labels", m$target) %>%
+  set("labels_cex", 0.5)%>%
+  plot
+
+
+```
+
+
+## eFigure6b
+```{r}
+#ipsi_67 is the formated file from clustering with experiments with clean targeting
+ipsi_67 <- read_csv("ipsi_67.csv")
+contra_67 <- read_csv("contra_67.csv")
+
+names(ipsi_67)[which(names(ipsi_67)=="AP.y")]<-"AP"
+names(contra_67)[which(names(contra_67)=="AP.y")]<-"AP"
+```
+
+####get overall pattern using the new five modules
+```{r}
+pre<-c("FRP",		"PL",	"ILA",	"ORBl",	"ORBm",	"ORBvl", "AId",	"AIv",	"AIp",	"PERI",	"ECT"	)
+sm<-c(	"GU",	"VISC",	"SSs",	"SSp-bfd",		"SSp-ll",	"SSp-ul",	"SSp-un",	"SSp-n",	"SSp-m",	"MOp",	"MOs")
+vs<-c("VISal",	"VISl",	"VISp",	"VISpl",	"VISli",	"VISpor",	"VISrl","VISa",	"VISam",	"VISpm")
+me<-c("SSp-tr","ACAd",	"ACAv",		"RSPagl",	"RSPd", "RSPv")
+au<-c("TEa","AUDd",	"AUDp",	"AUDpo",	"AUDv")
+
+breakdown<-function (l) {
+temp<-l[,1:13]
+temp$pre<-rowSums(l[,pre])
+temp$sm<-rowSums(l[,sm])
+temp$vs<-rowSums(l[,vs])
+temp$me<-rowSums(l[,me])
+temp$au<-rowSums(l[,au])
+temp$OLF<-rowSums(l[,which(names(l)=="MOB"):which(names(l)=="TR")])
+temp$HPF<-rowSums(l[,which(names(l)=="CA1"):which(names(l)=="APr")])
+temp$CTXsp<-rowSums(l[,which(names(l)=="CLA"):which(names(l)=="PA")])
+temp$STR<-rowSums(l[,which(names(l)=="CP"):which(names(l)=="MEA")])
+temp$PAL<-rowSums(l[,which(names(l)=="GPe"):which(names(l)=="BAC")])
+temp$TH<-rowSums(l[,which(names(l)=="VAL"):which(names(l)=="LH")])
+temp$HY<-rowSums(l[,which(names(l)=="SO"):which(names(l)=="ME")])
+temp$MB<-rowSums(l[,which(names(l)=="SCs"):which(names(l)=="DR")])
+temp$Pons<-rowSums(l[,which(names(l)=="NLL"):which(names(l)=="SLD")])
+temp$MY<-rowSums(l[,which(names(l)=="AP"):which(names(l)=="RO")])
+temp$CB<-rowSums(l[,which(names(l)=="LING"):which(names(l)=="VeCB")])
+return(temp)
+}
+
+pie_i<-breakdown(ipsi_67)
+pie_c<-breakdown(contra_67)
+
+f3_l<-gather(pie_i, key=area, value=input, 14:29)
+f3_r<-gather(pie_c, key=area, value=input,14:29)
+a<-c("pre",  "sm","me", "vs","au","OLF", "HPF","CTXsp", "STR", "PAL",  "TH",  "HY" , "MB", "Pons", "MY", "CB")
+rv<-rev(a)
+f3_l$tree <- factor(f3_l$tree, levels=c("4", "2", "3", "1", "5"))
+f3_l$area <- factor(f3_l$area, levels = rv)
+f3_r$tree <- factor(f3_r$tree,  levels=c("4", "2", "3", "1", "5"))
+f3_r$area <- factor(f3_r$area, levels = rv)
+
+p<-ggplot(f3_l, aes( x=input,y=area, fill=tree))+ geom_boxplot(outlier.color = "white", 
+                outlier.size=0.5)+
+        xlab("")+ylab("")+theme(legend.position = "right")+ 
+        theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+scale_x_reverse()
+
+  #8x6
+
+p1<-ggplot(f3_r, aes( x=input,y=area, fill=tree))+ geom_boxplot(outlier.color = "white", 
+                outlier.size=0.5)+
+        xlab("")+ylab("")+theme(legend.position = "right")+ 
+        theme_bw()+
+        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))
+grid.arrange(  p, p1, nrow=1)
+```
+
+# eFigure6d
+### Compare between areas of signicance
+```{r}
+cortex_area=order$X1[1:43]
+medial_cortex<-ipsi_67[,c(names(ipsi_67)[1:13], cortex_area)]
+s<-rowSums(medial_cortex[,cortex_area] ,na.rm = TRUE)
+medial_cortex[,cortex_area]<-medial_cortex[,cortex_area]/s
+medial_cortex$ACA<-medial_cortex$ACAd+medial_cortex$ACAv
+medial_cortex$RSP<-medial_cortex$RSPagl+medial_cortex$RSPd+medial_cortex$RSPv
+medial_cortex$AUD<-medial_cortex$AUDd+medial_cortex$AUDp+medial_cortex$AUDpo+medial_cortex$AUDv
+
+medial_cortex$tree<-factor(medial_cortex$tree, levels=c("5", "1", "3", "2" ,"4"))
+
+area_plot<-c("ACA" ,   "RSP" , "SSp-tr", "PL" ,     "ORBl" ,   "ORBm"  ,  "ORBvl", "MOp", "MOs"  ,"SSp-bfd",  "VISl", "VISp","VISrl", "VISa", "VISam",  "VISpm") 
+#check TukeyHSD
+#TukeyHSD(res)
+test<-gather(medial_cortex, key="source", value="percentage", 14:59)
+test$tree<-factor(test$tree, levels=c("5", "1", "3", "2", "4"))
+
+p=ggplot(test, aes(x=source, y=percentage, color=tree))+
+  geom_boxplot(position = position_dodge(width=0.8))+
+  geom_beeswarm( dodge.width=0.8,cex=0.5, size=1.5, aes(fill=tree))+
+  scale_x_discrete (limits=area_plot)+
+  theme(legend.position = "right")+ 
+  theme_bw()+
+  theme(panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))
+p
+```
+
