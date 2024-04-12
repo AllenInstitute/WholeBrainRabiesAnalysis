@@ -1,0 +1,271 @@
+---
+title: "eFigure2"
+output: html_document
+date: "2024-04-12"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{r}
+library(readxl)
+library(readr)
+library(dplyr)
+library(readr)
+library(tidyr)
+library(stringr)
+library(plotrix)
+library(ggplot2)
+library(gridExtra)
+```
+## load data
+```{r}
+load("../data/BG_list_March.RData")#ipsi from previous analysis with BG experiments
+order <- read_csv("../data/order1.csv", col_names = FALSE)
+```
+## eFigure2a
+```{r}
+pre<-c("FRP",	"ACAd",	"ACAv",	"PL",	"ILA",	"ORBl",	"ORBm",	"ORBvl")	
+la<-c("AId",	"AIv",	"AIp",	"GU",	"VISC",	"TEa",	"PERI",	"ECT"	)
+sm<-c("SSs",	"SSp-bfd",	"SSp-tr",	"SSp-ll",	"SSp-ul",	"SSp-un",	"SSp-n",	"SSp-m",	"MOp",	"MOs")
+vs<-c("VISal",	"VISl",	"VISp",	"VISpl",	"VISli",	"VISpor",	"VISrl")
+me<-c("VISa",	"VISam",	"VISpm",	"RSPagl",	"RSPd", "RSPv")
+au<-c("AUDd",	"AUDp",	"AUDpo",	"AUDv")
+
+breakdown<-function (l) {
+  temp<-l[,c("specimen","image_series_id", "target")]
+  temp$module<-temp$target
+  temp$module[temp$target %in% c(order$X1[1:43], "SSp-bfd-rll")]<-"cortex"
+  temp$module[temp$target %in% order$X1[100:143]]<-"thalamus"
+  temp$module[temp$target %in% c("CP", "OT", "ACB")]<-"striatum"
+  temp$module[temp$target %in% c("GPi", "GPe")]<-"GP"
+  temp$Cortex<-rowSums(l[,which(names(l)=="FRP"):which(names(l)=="AUDv")])
+  temp$OLF<-rowSums(l[,which(names(l)=="MOB"):which(names(l)=="TR")])
+  temp$HPF<-rowSums(l[,which(names(l)=="CA1"):which(names(l)=="APr")])
+  temp$CTXsp<-rowSums(l[,which(names(l)=="CLA"):which(names(l)=="PA")])
+  temp$STR<-rowSums(l[,which(names(l)=="CP"):which(names(l)=="MEA")])
+  temp$PAL<-rowSums(l[,which(names(l)=="GPe"):which(names(l)=="BAC")])
+  temp$TH<-rowSums(l[,which(names(l)=="VAL"):which(names(l)=="LH")])
+  temp$HY<-rowSums(l[,which(names(l)=="SO"):which(names(l)=="ME")])
+  temp$MB<-rowSums(l[,which(names(l)=="SCs"):which(names(l)=="DR")])
+  temp$Pons<-rowSums(l[,which(names(l)=="NLL"):which(names(l)=="SLD")])
+  temp$MY<-rowSums(l[,which(names(l)=="AP"):which(names(l)=="RO")])
+  temp$CB<-rowSums(l[,which(names(l)=="LING"):which(names(l)=="VeCB")])
+  
+  return(temp)
+}
+
+pie_l<-breakdown(ipsi_new)
+pie_r<-breakdown(contra_new)
+
+ms<-function(pie_l)
+{
+  m_l<-pie_l%>%group_by(module)%>%summarise(across(where(is.numeric), list(mean=mean ), na.rm = TRUE))
+  names(m_l)<-str_replace(names(m_l), "_mean", "")
+  m_l<-gather(m_l, key="input", value="mean", 2:dim(m_l)[2])
+  s_l<-pie_l%>%group_by(module)%>%summarise(across(where(is.numeric), list(se=std.error ), na.rm = TRUE))##require plotrix
+  names(s_l)<-str_replace(names(s_l), "_se", "")
+  s_l<-gather(s_l, key="input", value="se", 2:dim(s_l)[2])
+  m<-merge(m_l, s_l, by=c("module","input"))
+  return(m)
+  
+}
+
+bar_l<-ms(pie_l)
+bar_r<-ms(pie_r)
+##make barplot to show inputs to different targets
+input_areas<-names(pie_l)[5:16]
+rv<-rev(input_areas)
+bar_l$module <- factor(bar_l$module, levels = rev(c("cortex", "thalamus",  "striatum","GP" , "STN","SNc", "SNr", "VTA")))
+bar_l$input <- factor(bar_l$input, levels = rv)
+bar_r$module <- factor(bar_r$module, levels = rev(c("cortex", "thalamus",  "striatum","GP" , "STN","SNc", "SNr", "VTA")))
+bar_r$input <- factor(bar_r$input, levels = rv)
+
+g<-ggplot(bar_l,aes(x=input,y=mean,fill=module))+geom_bar(stat="identity",position=position_dodge(0.8))+
+  geom_errorbar(aes(ymin=mean-se,ymax=mean+se),width=.2,position=position_dodge(.8))+
+  theme_bw()+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+
+ scale_fill_manual(values = rainbow(30)[c(26,23,24,29,18,17,3, 9)])
+g+ coord_flip()+ scale_y_reverse()+ylim(0.75,-0.001)#6x8
+```
+```{r}
+g1<-ggplot(bar_r,aes(x=input,y=mean,fill=module))+geom_bar(stat="identity",position=position_dodge())+geom_errorbar(aes(ymin=mean-se,ymax=mean+se),width=.2,position=position_dodge(.9))+
+  theme_bw()+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+
+  ylim(-0.001,0.75)+
+  scale_fill_manual(values = rainbow(30)[c(26,23,24,29,18,17,3, 9)])
+g1+ coord_flip()
+```
+## eFigure2c
+```{r}
+pie<-pie_l[,c("specimen","image_series_id", "target", "module")]
+pie[,5:16]<-pie_l[,5:16]+pie_r[,5:16]
+
+test<-pie%>%group_by(module)%>%summarise(across(where(is.numeric), list(mean=mean ), na.rm = TRUE))
+names(test)<-str_replace(names(test), "_mean", "")
+test<-gather(test,key=input, value=percentage, 2:13)
+test$input<-factor(test$input, levels=input_areas)
+#generate pie char for  "cortex", "thalamus",  "striatum","GP" , "STN","SNc", "SNr", "VTA"
+p<-ggplot(subset(test, module=="cortex"), aes(x="", y=percentage, fill=input))+ geom_bar(stat="identity") +
+  coord_polar("y", start=0) +ggtitle("cortex")+theme_void()+theme(legend.position = "none")#default
+
+p1<-ggplot(subset(test, module=="thalamus"), aes(x="", y=percentage, fill=input))+ geom_bar(stat="identity") +
+  coord_polar("y", start=0) +ggtitle("thalamus")+theme_void()+theme(legend.position = "none")#default
+
+p2<-ggplot(subset(test, module=="striatum"), aes(x="", y=percentage, fill=input))+ geom_bar(stat="identity") +
+  coord_polar("y", start=0) +ggtitle("striatum")+theme_void()+theme(legend.position = "none")#default
+
+p3<-ggplot(subset(test, module=="GP"), aes(x="", y=percentage, fill=input))+ geom_bar(stat="identity") +
+  coord_polar("y", start=0) +ggtitle("GP")+theme_void()+theme(legend.position = "none")#default
+
+p4<-ggplot(subset(test, module=="STN"), aes(x="", y=percentage, fill=input))+ geom_bar(stat="identity") +
+  coord_polar("y", start=0) +ggtitle("STN")+theme_void()+theme(legend.position = "none")#default
+
+p5<-ggplot(subset(test, module=="SNc"), aes(x="", y=percentage, fill=input))+ geom_bar(stat="identity") +
+  coord_polar("y", start=0) +ggtitle("SNc")+theme_void()+theme(legend.position = "none")#default
+
+p6<-ggplot(subset(test, module=="SNr"), aes(x="", y=percentage, fill=input))+ geom_bar(stat="identity") +
+  coord_polar("y", start=0) +ggtitle("SNr")+theme_void()+theme(legend.position = "none")#default
+
+p7<-ggplot(subset(test, module=="VTA"), aes(x="", y=percentage, fill=input))+ geom_bar(stat="identity") +
+  coord_polar("y", start=0) +ggtitle("VTA")+theme_void()+theme(legend.position = "none")#default
+
+hlay<-rbind(c(1,2),
+            c(3,4),
+            c(5,6),
+            c(7, 8))
+plot.list<-list(p, p1, p2, p3, p4, p5, p6, p7)
+gridExtra::grid.arrange(grobs=plot.list, layout_matrix=hlay) #7x7
+
+```
+## eFigure2b
+
+```{r pressure, echo=FALSE}
+a_ipsi<-read_csv("../data/antero_ipsi_Feb2023.csv",    col_types = cols(...1 = col_skip()))
+a_contra<-read_csv("../data/antero_contra_Feb2023.csv",    col_types = cols(...1 = col_skip()))
+all_areas_list <- read_csv("../data/all_areas_list.csv",  col_types = cols(...1 = col_skip()))
+pre<-c("FRP",	"ACAd",	"ACAv",	"PL",	"ILA",	"ORBl",	"ORBm",	"ORBvl")	
+la<-c("AId",	"AIv",	"AIp",	"GU",	"VISC",	"TEa",	"PERI",	"ECT"	)
+sm<-c("SSs",	"SSp-bfd",	"SSp-tr",	"SSp-ll",	"SSp-ul",	"SSp-un",	"SSp-n",	"SSp-m",	"MOp",	"MOs")
+vs<-c("VISal",	"VISl",	"VISp",	"VISpl",	"VISli",	"VISpor",	"VISrl")
+me<-c("VISa",	"VISam",	"VISpm",	"RSPagl",	"RSPd", "RSPv")
+au<-c("AUDd",	"AUDp",	"AUDpo",	"AUDv")
+a_ipsi<-a_ipsi%>%subset(primary_source %in% c(order$X1[1:43], order$X1[100:143], "CP", "OT", "ACB","GPi", "GPe", "STN", "PTSN", "SNc", "SNr", "VTA"))
+a_contra<-a_contra%>%subset(primary_source %in% c(order$X1[1:43], order$X1[100:143], "CP", "OT", "ACB","GPi", "GPe", "STN", "PTSN", "SNc", "SNr", "VTA"))
+
+
+breakdown<-function (l) {
+  temp<-l[,names(l)[1:5]]
+  temp$module<-temp$primary_source
+  temp$module[temp$primary_source %in% c(order$X1[1:43])]<-"cortex"
+  temp$module[temp$primary_source %in% order$X1[100:143]]<-"thalamus"
+  temp$module[temp$primary_source %in% c("CP", "OT", "ACB")]<-"striatum"
+  temp$module[temp$primary_source %in% c("GPi", "GPe")]<-"GP"
+  temp$Cortex<-rowSums(l[,which(names(l)=="FRP"):which(names(l)=="AUDv")])
+  temp$OLF<-rowSums(l[,which(names(l)=="MOB"):which(names(l)=="TR")])
+  temp$HPF<-rowSums(l[,which(names(l)=="CA1"):which(names(l)=="APr")])
+  temp$CTXsp<-rowSums(l[,which(names(l)=="CLA"):which(names(l)=="PA")])
+  temp$STR<-rowSums(l[,which(names(l)=="CP"):which(names(l)=="MEA")])
+  temp$PAL<-rowSums(l[,which(names(l)=="GPe"):which(names(l)=="BAC")])
+  temp$TH<-rowSums(l[,which(names(l)=="VAL"):which(names(l)=="LH")])
+  temp$HY<-rowSums(l[,which(names(l)=="SO"):which(names(l)=="ME")])
+  temp$MB<-rowSums(l[,which(names(l)=="SCs"):which(names(l)=="DR")])
+  temp$Pons<-rowSums(l[,which(names(l)=="NLL"):which(names(l)=="SLD")])
+  temp$MY<-rowSums(l[,which(names(l)=="AP"):which(names(l)=="RO")])
+  temp$CB<-rowSums(l[,which(names(l)=="LING"):which(names(l)=="VeCB")])
+  
+  return(temp)
+}
+
+pie_l<-breakdown(a_ipsi)
+pie_r<-breakdown(a_contra)
+
+pie_l$image_series_id<-as.character(pie_l$image_series_id)
+pie_r$image_series_id<-as.character(pie_r$image_series_id)
+
+ms<-function(pie_l)
+{
+  m_l<-pie_l%>%group_by(module)%>%summarise(across(where(is.numeric), list(mean=mean ), na.rm = TRUE))
+  names(m_l)<-str_replace(names(m_l), "_mean", "")
+  m_l<-gather(m_l, key="input", value="mean", 2:dim(m_l)[2])
+  s_l<-pie_l%>%group_by(module)%>%summarise(across(where(is.numeric), list(se=std.error ), na.rm = TRUE))##require plotrix
+  names(s_l)<-str_replace(names(s_l), "_se", "")
+  s_l<-gather(s_l, key="input", value="se", 2:dim(s_l)[2])
+  m<-merge(m_l, s_l, by=c("module","input"))
+  return(m)
+  
+}
+
+bar_l<-ms(pie_l)
+bar_r<-ms(pie_r)
+##make barplot to show inputs to different targets
+input_areas<-names(pie_l)[7:18]
+rv<-rev(input_areas)
+bar_l$module <- factor(bar_l$module, levels = rev(c("cortex", "thalamus",  "striatum","GP" , "STN","SNc", "SNr", "VTA")))
+bar_l$input <- factor(bar_l$input, levels = rv)
+bar_r$module <- factor(bar_r$module, levels = rev(c("cortex", "thalamus",  "striatum","GP" , "STN","SNc", "SNr", "VTA")))
+bar_r$input <- factor(bar_r$input, levels = rv)
+
+g<-ggplot(bar_l,aes(x=input,y=mean,fill=module))+geom_bar(stat="identity",position=position_dodge(0.8))+
+  geom_errorbar(aes(ymin=mean-se,ymax=mean+se),width=.2,position=position_dodge(.8))+
+  theme_bw()+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+
+ scale_fill_manual(values = rainbow(30)[c(26,23,29,18,17,3, 9)])
+g+ coord_flip()+ scale_y_reverse()+ylim(0.75,-0.001)#6x8
+```
+```{r}
+g1<-ggplot(bar_r,aes(x=input,y=mean,fill=module))+geom_bar(stat="identity",position=position_dodge())+geom_errorbar(aes(ymin=mean-se,ymax=mean+se),width=.2,position=position_dodge(.9))+
+  theme_bw()+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.background = element_rect(fill = NA),legend.key = element_rect(fill =NA))+
+  ylim(-0.001,0.75)+
+  scale_fill_manual(values = rainbow(30)[c(26,23,29,18,17,3, 9)])
+g1+ coord_flip()
+```
+## eFigure2d
+```{r}
+
+pie<-pie_l[,names(pie_l)[1:6]]
+pie[,7:18]<-pie_l[,7:18]+pie_r[,7:18]
+
+test<-pie%>%group_by(module)%>%summarise(across(where(is.numeric), list(mean=mean ), na.rm = TRUE))
+names(test)<-str_replace(names(test), "_mean", "")
+test<-gather(test,key=input, value=percentage, 2:13)
+test$input<-factor(test$input, levels=input_areas)
+#generate pie char for  "cortex", "thalamus",  "striatum","GP" , "STN","SNc", "SNr", "VTA"
+p<-ggplot(subset(test, module=="cortex"), aes(x="", y=percentage, fill=input))+ geom_bar(stat="identity") +
+  coord_polar("y", start=0) +ggtitle("cortex")+theme_void()+theme(legend.position = "none")#default
+
+p1<-ggplot(subset(test, module=="thalamus"), aes(x="", y=percentage, fill=input))+ geom_bar(stat="identity") +
+  coord_polar("y", start=0) +ggtitle("thalamus")+theme_void()+theme(legend.position = "none")#default
+
+p2<-ggplot(subset(test, module=="striatum"), aes(x="", y=percentage, fill=input))+ geom_bar(stat="identity") +
+  coord_polar("y", start=0) +ggtitle("striatum")+theme_void()+theme(legend.position = "none")#default
+
+p3<-ggplot(subset(test, module=="GP"), aes(x="", y=percentage, fill=input))+ geom_bar(stat="identity") +
+  coord_polar("y", start=0) +ggtitle("GP")+theme_void()+theme(legend.position = "none")#default
+
+p4<-ggplot(subset(test, module=="STN"), aes(x="", y=percentage, fill=input))+ geom_bar(stat="identity") +
+  coord_polar("y", start=0) +ggtitle("STN")+theme_void()+theme(legend.position = "none")#default
+
+# p5<-ggplot(subset(test, module=="SNc"), aes(x="", y=percentage, fill=input))+ geom_bar(stat="identity") +
+#   coord_polar("y", start=0) +ggtitle("SNc")+theme_void()+theme(legend.position = "none")#default
+
+p6<-ggplot(subset(test, module=="SNr"), aes(x="", y=percentage, fill=input))+ geom_bar(stat="identity") +
+  coord_polar("y", start=0) +ggtitle("SNr")+theme_void()+theme(legend.position = "none")#default
+
+p7<-ggplot(subset(test, module=="VTA"), aes(x="", y=percentage, fill=input))+ geom_bar(stat="identity") +
+  coord_polar("y", start=0) +ggtitle("VTA")+theme_void()+theme(legend.position = "none")#default
+
+hlay<-rbind(c(1,2),
+            c(3,4),
+            c(5,6),
+            c(7, 8))
+plot.list<-list(p, p1, p2, p3, p4, p6, p7)
+gridExtra::grid.arrange(grobs=plot.list, layout_matrix=hlay) #7x7
+
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
